@@ -18,7 +18,7 @@ class MainMenuState extends MusicBeatState
 	public static var pSliceVersion:String = '3.3.1';
 	public static var funkinVersion:String = '0.7.4';
 	public static var hrkVersion:String = '0.2.4';
-	public static var mSliceVersion:String = '0.0.3';
+	public static var dSliceVersion:String = '0.0.2';
 
 	public static var curSelected:Int = 0;
 
@@ -58,14 +58,30 @@ class MainMenuState extends MusicBeatState
 		magenta.color = 0xFFfd719b;
 		add(magenta);
 
-		var versionText = new FlxText(8, FlxG.height - 28, FlxG.width, 'M-Slice v${mSliceVersion}', 16);
-		versionText.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		versionText.scrollFactor.set();
-		versionText.antialiasing = ClientPrefs.data.antialiasing;
-		add(versionText);
+		var mSliceVer:FlxText = new FlxText(
+			8,
+			FlxG.height - 28,
+			FlxG.width,
+			'M-Slice v0.0.3',
+			16
+		);
+
+		mSliceVer.setFormat(
+			Paths.font("vcr.ttf"),
+			16,
+			FlxColor.WHITE,
+			LEFT,
+			FlxTextBorderStyle.OUTLINE,
+			FlxColor.BLACK
+		);
+
+		mSliceVer.scrollFactor.set();
+		mSliceVer.antialiasing = ClientPrefs.data.antialiasing;
+		add(mSliceVer);
 
 		#if ACHIEVEMENTS_ALLOWED
 		var leDate = Date.now();
+
 		if (leDate.getDay() == 5 && leDate.getHours() >= 18)
 			MainMenuHooks.unlockFriday();
 
@@ -87,6 +103,7 @@ class MainMenuState extends MusicBeatState
 	function goToOptions()
 	{
 		MusicBeatState.switchState(new OptionsState());
+
 		#if !LEGACY_PSYCH
 		OptionsState.onPlayState = false;
 		#end
