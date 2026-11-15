@@ -5089,44 +5089,58 @@ class PlayState extends MusicBeatState
 		if (Conductor.songPosition >= 0)
 			Conductor.songPosition = FlxG.sound.music.time + Conductor.offset;
 
-		// obtain notes that the player can hit
-		var plrInputNotes:Array<Note> = notes.members.filter(function(n:Note):Bool
+		// Find the best two hittable notes without allocating or sorting an array.
+		var safeZone:Float = Conductor.safeZoneOffset;
+		var songTime:Float = Conductor.songPosition;
+
+		var funnyNote:Note = null;
+		var doubleNote:Note = null;
+
+		for (n in notes.members)
 		{
-			var canHit:Bool = n != null && !strumsBlocked[n.noteData] && n.canBeHit && n.mustPress && !n.tooLate && !n.wasGoodHit && !n.blockHit;
-			return canHit && !n.isSustainNote && n.noteData == key;
-		});
-		plrInputNotes.sort(sortHitNotes);
+			if (n == null || n.noteData != key || !n.mustPress
+				|| n.tooLate || n.wasGoodHit || n.blockHit || n.isSustainNote
+				|| strumsBlocked[key])
+				continue;
 
-		if (plrInputNotes.length != 0)
-		{ // slightly faster than doing `> 0` lol
-			var funnyNote:Note = plrInputNotes[0]; // front note
+			var canHitNow:Bool =
+				n.strumTime > songTime - (safeZone * n.lateHitMult)
+				&& n.strumTime < songTime + (safeZone * n.earlyHitMult);
 
-			if (plrInputNotes.length > 1)
+			if (!canHitNow)
+				continue;
+
+			if (funnyNote == null || sortHitNotes(n, funnyNote) < 0)
 			{
-				var doubleNote:Note = plrInputNotes[1];
-
-				if (doubleNote.noteData == funnyNote.noteData)
-				{
-					// if the note has a 0ms distance (is on top of the current note), kill it
-					if (Math.abs(doubleNote.strumTime - funnyNote.strumTime) < 1.0)
-						invalidateNote(doubleNote);
-					else if (doubleNote.strumTime < funnyNote.strumTime)
-					{
-						// replace the note if its ahead of time (or at least ensure "doubleNote" is ahead)
-						funnyNote = doubleNote;
-					}
-				}
+				doubleNote = funnyNote;
+				funnyNote = n;
 			}
+			else if (doubleNote == null || sortHitNotes(n, doubleNote) < 0)
+			{
+				doubleNote = n;
+			}
+		}
+
+		if (funnyNote != null)
+		{
+			if (doubleNote != null)
+			{
+				if (Math.abs(doubleNote.strumTime - funnyNote.strumTime) < 1.0)
+					invalidateNote(doubleNote);
+				else if (doubleNote.strumTime < funnyNote.strumTime)
+					funnyNote = doubleNote;
+			}
+
 			goodNoteHit(funnyNote);
-			if (showPopups && popUpHitNote != null) popUpScore(funnyNote);
+			if (showPopups && popUpHitNote != null)
+				popUpScore(funnyNote);
 		}
 		else
 		{
-			if (ClientPrefs.data.ghostTapping){
+			if (ClientPrefs.data.ghostTapping)
 				callOnScripts('onGhostTap', [key]);
-			}else{
+			else
 				noteMissPress(key);
-			}
 		}
 
 		// Needed for the  "Just the Two of Us" achievement.
