@@ -1,73 +1,147 @@
 
 package mikolka.vslice.ui;
 
-import states.MainMenuState as DesktopMenuState;
-import mikolka.vslice.ui.MainMenuHooks;
-import mikolka.vslice.VsliceOptions;
-import mikolka.vslice.utils.ModsHelper;
+import mikolka.vslice.ui.mainmenu.DesktopMenuState;
+import mikolka.compatibility.ui.MainMenuHooks;
+import mikolka.compatibility.VsliceOptions;
+import mikolka.compatibility.ModsHelper;
 import options.OptionsState;
 
 class MainMenuState extends MusicBeatState
 {
-    public static var psychEngineVersion:String = '1.0.4';
-    public static var psychEngineVersionLegacy:String = '0.6.3';
+	#if !LEGACY_PSYCH
+	public static var psychEngineVersion:String = '1.0.4'; // This is also used for Discord RPC
+	#else
+	public static var psychEngineVersion:String = '0.6.3'; // This is also used for Discord RPC
+	#end
 
-    public static var pSliceVersion:String = '';
-    public static var funkinVersion:String = '';
-    public static var hrkVersion:String = '';
-    public static var dSliceVersion:String = '';
+	public static var pSliceVersion:String = '3.3.1';
+	public static var funkinVersion:String = '0.7.4'; // Version of funkin' we are emulating
+	public static var hrkVersion:String = '0.2.4'; // Version of H-Slice
+	public static var dSliceVersion:String = '0.0.2'; // Version of D-Slice
+	public static var mSliceVersion:String = '0.0.3';
 
-    public static var mSliceVersion:String = '0.0.3';
+	public static var curSelected:Int = 0;
 
-    public var curSelected:Int = 0;
-    public var bg:FlxSprite;
-    public var magenta:FlxSprite;
+	var menuItems:FlxTypedGroup<FlxSprite>;
 
-    public function new(isDisplayingRank:Bool = false)
-    {
-        super();
-    }
+	var optionShit:Array<String> = [
+		'story_mode',
+		'freeplay',
+		#if MODS_ALLOWED 'mods', #end
+		#if ACHIEVEMENTS_ALLOWED 'awards', #end
+		'credits',
+		#if !switch 'donate', #end
+		'options'
+	];
 
-    override function create()
-    {
-        ModsHelper.clearStoredMemory();
-        ModsHelper.clearUnusedMemory();
+	var bg:FlxSprite;
+	var magenta:FlxSprite;
 
-        super.create();
+	public function new(isDisplayingRank:Bool = false)
+	{
+		//TODO
+		super();
+	}
 
-        bg = new FlxSprite().loadGraphic(Paths.image('menuBG'));
-        bg.antialiasing = ClientPrefs.data.antialiasing;
-        bg.scrollFactor.set();
-        add(bg);
+	override function create()
+	{
+		ModsHelper.clearStoredWithoutStickers();
+		Paths.clearUnusedMemory();
 
-        magenta = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, 0xFFFD719B);
-        magenta.visible = false;
-        add(magenta);
+		ModsHelper.resetActiveMods();
 
-        var versionText = new FlxText(12, FlxG.height - 24, 0, 'M-Slice v' + mSliceVersion, 12);
-        versionText.scrollFactor.set();
-        add(versionText);
+		#if DISCORD_ALLOWED
+		// Updating Discord Rich Presence
+		DiscordClient.changePresence("In the Main Menus", null);
+		#end
 
-        Achievements.load();
+		persistentUpdate = persistentDraw = true;
 
-        if (FlxG.onMobile)
-        {
-            // Keep the existing mobile menu behavior.
-            super.create();
-        }
-        else
-        {
-            DesktopMenuState.switchState();
-        }
-    }
+		bg = new FlxSprite(-80).loadGraphic(Paths.image('menuBG'));
+		bg.antialiasing = VsliceOptions.ANTIALIASING;
+		bg.setGraphicSize(Std.int(bg.width * 1.175));
+		bg.updateHitbox();
+		bg.screenCenter();
+		add(bg);
 
-    public function goToOptions()
-    {
-        MusicBeatState.switchState(new OptionsState());
-    }
+		magenta = new FlxSprite(-80).loadGraphic(Paths.image('menuDesat'));
+		magenta.antialiasing = VsliceOptions.ANTIALIASING;
+		magenta.setGraphicSize(Std.int(magenta.width * 1.175));
+		magenta.updateHitbox();
+		magenta.screenCenter();
+		magenta.visible = false;
+		magenta.color = 0xFFfd719b;
+		add(magenta);
 
-    override function update(elapsed:Float)
-    {
-        super.update(elapsed);
-    }
+		var padding:Float = 8;
+
+		var mSliceVer:FlxText = new FlxText(
+			padding,
+			FlxG.height - 38 - padding,
+			FlxG.width,
+			'M-Slice v${mSliceVersion}',
+			12
+		);
+
+		mSliceVer.setFormat(
+			Paths.font("vcr.ttf"),
+			16,
+			FlxColor.WHITE,
+			LEFT,
+			FlxTextBorderStyle.OUTLINE,
+			FlxColor.BLACK
+		);
+
+		mSliceVer.scrollFactor.set();
+		mSliceVer.antialiasing = ClientPrefs.data.antialiasing;
+		add(mSliceVer);
+
+		#if ACHIEVEMENTS_ALLOWED
+		// Unlocks "Freaky on a Friday Night" achievement if it's a Friday and between 18:00 PM and 23:59 PM
+		var leDate = Date.now();
+		if (leDate.getDay() == 5 && leDate.getHours() >= 18)
+			MainMenuHooks.unlockFriday();
+
+		#if MODS_ALLOWED
+		MainMenuHooks.reloadAchievements();
+		#end
+		#end
+
+		super.create();
+
+		#if TOUCH_CONTROLS_ALLOWED
+		if (controls.mobileC)
+			new mobile.states.MobileMenuState(this);
+		else
+		#end
+		new DesktopMenuState(this);
+	}
+
+	function goToOptions()
+	{
+		MusicBeatState.switchState(new OptionsState());
+
+		#if !LEGACY_PSYCH
+		OptionsState.onPlayState = false;
+		#end
+
+		if (PlayState.SONG != null)
+		{
+			PlayState.SONG.arrowSkin = null;
+			PlayState.SONG.splashSkin = null;
+
+			#if !LEGACY_PSYCH
+			PlayState.stageUI = 'normal';
+			#end
+		}
+	}
+
+	override function update(elapsed:Float)
+	{
+		if (FlxG?.sound?.music?.length > 1000 && FlxG?.sound?.music?.volume < 0.8)
+			FlxG.sound.music.volume += 0.5 * elapsed;
+
+		super.update(elapsed);
+	}
 }
