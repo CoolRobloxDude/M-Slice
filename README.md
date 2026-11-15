@@ -69,4 +69,4 @@ Replace `windows` with `linux` or `mac` for other platforms.
 
 ## License
 
-See [LICENSE](LICENSE) for more information.
+M-Slice is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
