@@ -1,3 +1,4 @@
+
 package mikolka.vslice.ui;
 
 import mikolka.vslice.ui.mainmenu.DesktopMenuState;
@@ -9,44 +10,33 @@ import options.OptionsState;
 class MainMenuState extends MusicBeatState
 {
 	#if !LEGACY_PSYCH
-	public static var psychEngineVersion:String = '1.0.4'; // This is also used for Discord RPC
+	public static var psychEngineVersion:String = '1.0.4';
 	#else
-	public static var psychEngineVersion:String = '0.6.3'; // This is also used for Discord RPC
+	public static var psychEngineVersion:String = '0.6.3';
 	#end
+
 	public static var pSliceVersion:String = '3.3.1';
-	public static var funkinVersion:String = '0.7.4'; // Version of funkin' we are emulationg
-	public static var hrkVersion:String = '0.2.4'; // Version of H-Slice
-	public static var dSliceVersion:String = '0.0.2'; // Version of D-Slice
+	public static var funkinVersion:String = '0.7.4';
+	public static var hrkVersion:String = '0.2.4';
+	public static var mSliceVersion:String = '0.0.3';
+
 	public static var curSelected:Int = 0;
-
-	var menuItems:FlxTypedGroup<FlxSprite>;
-
-	var optionShit:Array<String> = [
-		'story_mode',
-		'freeplay',
-		#if MODS_ALLOWED 'mods', #end
-		#if ACHIEVEMENTS_ALLOWED 'awards', #end
-		'credits',
-		#if !switch 'donate', #end
-		'options'
-	];
 
 	var bg:FlxSprite;
 	var magenta:FlxSprite;
-	public function new(isDisplayingRank:Bool = false) {
-		//TODO
+
+	public function new(isDisplayingRank:Bool = false)
+	{
 		super();
 	}
-	
+
 	override function create()
 	{
 		ModsHelper.clearStoredWithoutStickers();
 		Paths.clearUnusedMemory();
-
 		ModsHelper.resetActiveMods();
 
 		#if DISCORD_ALLOWED
-		// Updating Discord Rich Presence
 		DiscordClient.changePresence("In the Main Menus", null);
 		#end
 
@@ -68,39 +58,13 @@ class MainMenuState extends MusicBeatState
 		magenta.color = 0xFFfd719b;
 		add(magenta);
 
-		var padding:Float = 8;
-		var dsliceVer:FlxText = new FlxText(padding, FlxG.height - 98 - padding, FlxG.width, 'D-Slice v${dSliceVersion}', 12);
-		var hrkVer:FlxText = new FlxText(padding, FlxG.height - 78 - padding, FlxG.width, 'H-Slice+JS v' + hrkVersion, 12);
-		var psliceVer:FlxText = new FlxText(padding, FlxG.height - 58 - padding, FlxG.width, 'P-Slice v${pSliceVersion}', 12);
-		var psychVer:FlxText = new FlxText(padding, FlxG.height - 38 - padding, FlxG.width, 'Psych Engine v' + psychEngineVersion, 12);
-		var fnfVer:FlxText = new FlxText(padding, FlxG.height - 18 - padding, FlxG.width, 'Friday Night Funkin\' v${funkinVersion}', 12);
-
-		dsliceVer.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		hrkVer.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		psliceVer.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		psychVer.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		fnfVer.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		
-		dsliceVer.scrollFactor.set();
-		hrkVer.scrollFactor.set();
-		psliceVer.scrollFactor.set();
-		psychVer.scrollFactor.set();
-		fnfVer.scrollFactor.set();
-		
-		dsliceVer.antialiasing = ClientPrefs.data.antialiasing;
-		hrkVer.antialiasing = ClientPrefs.data.antialiasing;
-		psliceVer.antialiasing = ClientPrefs.data.antialiasing;
-		psychVer.antialiasing = ClientPrefs.data.antialiasing;
-		fnfVer.antialiasing = ClientPrefs.data.antialiasing;
-
-		add(dsliceVer);
-		add(hrkVer);
-		add(psliceVer);
-		add(psychVer);
-		add(fnfVer);
+		var versionText = new FlxText(8, FlxG.height - 28, FlxG.width, 'M-Slice v${mSliceVersion}', 16);
+		versionText.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		versionText.scrollFactor.set();
+		versionText.antialiasing = ClientPrefs.data.antialiasing;
+		add(versionText);
 
 		#if ACHIEVEMENTS_ALLOWED
-		// Unlocks "Freaky on a Friday Night" achievement if it's a Friday and between 18:00 PM and 23:59 PM
 		var leDate = Date.now();
 		if (leDate.getDay() == 5 && leDate.getHours() >= 18)
 			MainMenuHooks.unlockFriday();
@@ -111,6 +75,7 @@ class MainMenuState extends MusicBeatState
 		#end
 
 		super.create();
+
 		#if TOUCH_CONTROLS_ALLOWED
 		if (controls.mobileC)
 			new mobile.states.MobileMenuState(this);
@@ -118,16 +83,22 @@ class MainMenuState extends MusicBeatState
 		#end
 		new DesktopMenuState(this);
 	}
-	
+
 	function goToOptions()
 	{
 		MusicBeatState.switchState(new OptionsState());
-		#if !LEGACY_PSYCH OptionsState.onPlayState = false; #end
+		#if !LEGACY_PSYCH
+		OptionsState.onPlayState = false;
+		#end
+
 		if (PlayState.SONG != null)
 		{
 			PlayState.SONG.arrowSkin = null;
 			PlayState.SONG.splashSkin = null;
-			#if !LEGACY_PSYCH PlayState.stageUI = 'normal'; #end
+
+			#if !LEGACY_PSYCH
+			PlayState.stageUI = 'normal';
+			#end
 		}
 	}
 
@@ -135,6 +106,7 @@ class MainMenuState extends MusicBeatState
 	{
 		if (FlxG?.sound?.music?.length > 1000 && FlxG?.sound?.music?.volume < 0.8)
 			FlxG.sound.music.volume += 0.5 * elapsed;
+
 		super.update(elapsed);
 	}
 }
