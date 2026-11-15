@@ -5774,7 +5774,49 @@ class PlayState extends MusicBeatState
 		if (!note.isSustainNote) invalidateNote(note);
 	}
 
-	function collapseStack(mainNote:Note):Int
+
+function collapseStack(mainNote:Note):Int
+{
+    if (!ClientPrefs.data.moreSpammableInputs || cpuControlled)
+        return 0;
+
+    var window:Int = Std.int(Math.max(1, ClientPrefs.data.stackWindow));
+    var songPos:Float = Conductor.songPosition;
+    var killed:Int = 0;
+
+    for (note in notes.members)
+    {
+        if (note == null || !note.exists || note == mainNote)
+            continue;
+
+        if (!note.mustPress || note.wasGoodHit || note.isSustainNote)
+            continue;
+
+        if (note.blockHit || note.hitCausesMiss)
+            continue;
+
+        if (note.noteData != mainNote.noteData)
+            continue;
+
+        // Don't consume notes belonging to the opposite side.
+        if (bothSides && note.doOppStuff != mainNote.doOppStuff)
+            continue;
+
+        if (Math.abs(note.strumTime - songPos) <= window)
+        {
+            note.wasGoodHit = true;
+            note.tooLate = false;
+            note.ignoreNote = true;
+            note.visible = false;
+            note.alpha = 0;
+
+            killed++;
+        }
+    }
+
+    return killed;
+}
+
 	{
 	    if (!ClientPrefs.data.moreSpammableInputs || cpuControlled) return 0;
 
