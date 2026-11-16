@@ -27,17 +27,7 @@ jobs:
       os: ${{ matrix.os }}
       CACHE_NAME: ${{ matrix.CACHE_NAME }}
       setupScript: ${{ matrix.setupScript }}
-  BuildMacos:
-    name: macos
-    needs: BuildCaches
-    permissions: write-all
-    uses: ./.github/workflows/mac-universal.yml
-    with:
-      exportPath: macos
-      artifactName: H-Slice+JS_0.2.4_macos
-      artifactPath: export/release/macos/bin/*
-      cachePath: H-Slice+JS.build-macos
-      cacheLibrariesPath: H-Slice+JS.mobile-cache
+      
   BuildDesktop:
     name: ${{ matrix.name }}
     needs: BuildCaches
