@@ -51,6 +51,7 @@ typedef CastNote = {
 	var noteData:Int;
 	@:optional var density:Null<Float>;
 	@:optional var holdLength:Null<Float>;
+	@:optional var sustainEndTime:Null<Float>;
 	@:optional var noteType:String;
 	@:optional var cmpSpam:Array<Dynamic>;
 	var doOppStuff:Bool;
@@ -116,6 +117,8 @@ class Note extends FlxSprite
 	public var blockHit:Bool = false; // only works for player
 
 	public var sustainLength:Float = 0;
+	/** Absolute song timestamp of the end of this sustain chain. */
+	public var sustainEndTime:Float = 0;
 	public var sustainScale:Float = 1.0;
 	public var isSustainNote:Bool = false;
 	public var isSustainEnds:Bool = false;
@@ -633,6 +636,7 @@ class Note extends FlxSprite
 		} catch (e:Dynamic) {}
 
 		sustainLength = target.holdLength ?? 0;
+		sustainEndTime = target.sustainEndTime ?? target.strumTime;
 
 		// this.parent = parent;
 		// if (this.parent != null) parent.tail = [];
@@ -709,6 +713,7 @@ class Note extends FlxSprite
 			density: 1,
 			noteType: this.noteType,
 			holdLength: this.sustainLength,
+			sustainEndTime: this.sustainEndTime,
 			doOppStuff: this.doOppStuff
 		};
 
