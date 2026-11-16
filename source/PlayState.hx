@@ -5784,9 +5784,10 @@ class PlayState extends MusicBeatState
 		}
 
 		if (!note.isSustainNote) invalidateNote(note);
-	}
+    }
+}
 
-	function collapseStack(mainNote:Note):Int
+function collapseStack(mainNote:Note):Int
 	{
 	    if (!ClientPrefs.data.moreSpammableInputs || cpuControlled) return 0;
 
