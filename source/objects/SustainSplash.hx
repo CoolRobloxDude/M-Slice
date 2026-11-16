@@ -12,9 +12,6 @@ class SustainSplash extends FlxSprite
 	public var startCrochet = 0.0;
 	public var holding = false;
 	public var ending = false;
-	// True once the charted final sustain segment has been hit and its tail
-	// animation is waiting for the remaining chart time to elapse.
-	var tailPending:Bool = false;
 	public var note:Note;
 
 	var rnd:FlxRandom;
@@ -70,52 +67,48 @@ class SustainSplash extends FlxSprite
 		if (note.exists && note.strum != null)
 		{
 			setPosition(note.strum.x, note.strum.y);
-			// A released hold disappears immediately, but a tail already reached
-			// may still finish its scheduled ending animation.
-			visible = (holding || ending) && note.strum.visible;
+			visible = note.strum.visible;
 			alpha = ClientPrefs.data.holdSplashAlpha - (1 - note.strum.alpha);
 		}
 	}
 
 	public function setupSusSplash(daNote:Note, ?playbackRate:Float = 1):Void
 	{
-		if (daNote == null) return;
-
-		// An end segment cannot revive a cover after this lane was released.
-		if (daNote.isSustainEnds && !holding)
-		{
-			kill();
-			return;
-		}
-
 		this.revive();
+		var wasHolding:Bool = holding;
+		// Cancel any previous sustain's delayed end and discard stale callbacks
+		// before this pooled splash is assigned to a new note.
+		timer.cancel();
+		if (animation != null) animation.finishCallback = null;
+		holding = false;
+		ending = false;
 		var castNote:CastNote = daNote.toCastNote();
 		this.note.recycleNote(castNote);
 		note.strum = daNote.strum;
-		timer.cancel();
-		if (animation != null) animation.finishCallback = null;
+		// trace(note.isSustainEnds);
 		
 		if (!note.isSustainEnds) {
 			holding = true;
 			ending = false;
-			tailPending = false;
 
 			if (note.strum != null) setPosition(note.strum.x, note.strum.y);
 			animId = noShader ? Std.string(note?.noteData ?? 0) : '';
 
-			if (animation.exists('start$animId'))
+			animation.play('start$animId', true);
+
+			if (animation.curAnim != null)
 			{
-				animation.play('start$animId', true);
-				if (animation.curAnim != null)
-				{
-					animation.curAnim.looped = false;
-					animation.curAnim.frameRate = frameRate;
-					animation.finishCallback = a -> {
-						animation.finishCallback = null;
-						playHoldAnimation();
-					};
-				} else playHoldAnimation();
-			} else playHoldAnimation();
+				animation.curAnim.looped = false;
+				animation.curAnim.frameRate = frameRate;
+				animation.finishCallback = a -> {
+					animation.finishCallback = null;
+					playHoldAnimation();
+				};
+			} else {
+				// Some custom skins omit the intro. Fall back to the looping hold
+				// animation instead of leaving an invisible active splash.
+				playHoldAnimation();
+			}
 
 			clipRect = new flixel.math.FlxRect(0, !PlayState.isPixelStage ? 0 : -210, frameWidth, frameHeight);
 
@@ -130,30 +123,14 @@ class SustainSplash extends FlxSprite
 
 			alpha = ClientPrefs.data.holdSplashAlpha - (1 - note.strum.alpha);
 			offset.set(PlayState.isPixelStage ? 112.5 : 106.25, 100);
-		} else if (holding) {
-			// Schedule the ending for the charted tail time, not the key-up event.
-			tailPending = true;
-			startCrochet = Math.max(0, (note.strumTime - Conductor.songPosition + ClientPrefs.data.ratingOffset) * 0.001 / playbackRate);
-			timer.start(startCrochet, t -> {
-				if (tailPending && note != null && note.exists && note.isSustainEnds)
-					showEndSplash();
-				else
-					kill();
-			});
-		}
-	}
-
-	/** Stop the hold visual on key-up without playing its tail animation early. */
-	public function releaseHold():Void
-	{
-		if (!holding) return;
-		holding = false;
-		if (!tailPending)
-		{
+		} else if (wasHolding) {
+			startCrochet = (Conductor.stepCrochet - Conductor.songPosition + note.strumTime) * 0.001 / playbackRate;
+			timer.start(startCrochet, t -> showEndSplash());
+		} else {
+			// An end segment without an active hold splash must not leave a
+			// revived, animation-less pooled object on screen.
 			kill();
-			return;
 		}
-		visible = false;
 	}
 
 	function playHoldAnimation():Void
@@ -163,7 +140,9 @@ class SustainSplash extends FlxSprite
 		{
 			animation.curAnim.frameRate = frameRate;
 			animation.curAnim.looped = true;
-		} else kill();
+		} else {
+			kill();
+		}
 	}
 
 	public function isTimerWorking() {
@@ -171,18 +150,15 @@ class SustainSplash extends FlxSprite
 	}
 
 	public function showEndSplash() {
-		if (!tailPending || ending) return;
-		tailPending = false;
+		if (!exists || ending) return;
 		holding = false;
 		ending = true;
-		visible = true;
 		timer.cancel();
-		if (exists && animation != null && note != null && note.strum != null && animation.exists('end$animId'))
+		if (animation != null && note != null && note.strum != null && animation.exists('end$animId'))
 		{
 			alpha = ClientPrefs.data.holdSplashAlpha - (1 - note.strum.alpha);
 			animation.play('end$animId', true, false, 0);
-			if (animation.curAnim == null)
-			{
+			if (animation.curAnim == null) {
 				kill();
 				return;
 			}
@@ -196,9 +172,8 @@ class SustainSplash extends FlxSprite
 	}
 
 	override function kill() {
-		if (timer != null) timer.cancel();
+		timer.cancel();
 		holding = false;
-		tailPending = false;
 		ending = false;
 		if (animation != null) animation.finishCallback = null;
 		super.kill();
