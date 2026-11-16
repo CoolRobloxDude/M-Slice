@@ -5787,35 +5787,44 @@ class PlayState extends MusicBeatState
     }
 
 function collapseStack(mainNote:Note):Int
-	{
-	    if (!ClientPrefs.data.moreSpammableInputs || cpuControlled) return 0;
+{
+    if (!ClientPrefs.data.moreSpammableInputs || cpuControlled)
+        return 0;
 
-	    var window:Int = Std.int(Math.max(1, ClientPrefs.data.stackWindow));
-	    var songPos:Float = Conductor.songPosition;
-	    var killed:Int = 0;
+    var window:Int = Std.int(Math.max(1, ClientPrefs.data.stackWindow));
+    var songPos:Float = Conductor.songPosition;
+    var killed:Int = 0;
 
-	    for (note in notes.members)
-	    {
-	        if (note == null || note == mainNote) continue;
-	        if (!note.mustPress) continue;
-	        if (note.wasGoodHit) continue;
-	        if (note.noteData != mainNote.noteData) continue;
+    for (note in notes.members)
+    {
+        if (note == null || !note.exists || note == mainNote)
+            continue;
 
-	        if (Math.abs(note.strumTime - songPos) <= window)
-	        {
-	            note.wasGoodHit = true;
-	            note.tooLate = false;
-	            note.ignoreNote = true;
-	            note.visible = false;
-	            note.alpha = 0;
+        if (!note.mustPress || note.wasGoodHit || note.isSustainNote)
+            continue;
 
-	            if (!note.isSustainNote)
-	                killed++;
-	        }
-	    }
+        if (note.blockHit || note.hitCausesMiss)
+            continue;
 
-	    return killed;
-	}
+        if (note.noteData != mainNote.noteData)
+            continue;
+
+        if (bothSides && note.doOppStuff != mainNote.doOppStuff)
+            continue;
+
+        if (Math.abs(note.strumTime - songPos) <= window)
+        {
+            note.wasGoodHit = true;
+            note.tooLate = false;
+            note.ignoreNote = true;
+            note.visible = false;
+            note.alpha = 0;
+            killed++;
+        }
+    }
+
+    return killed;
+}
 
 	public function invalidateNote(note:Note):Void {
 		if (!note.exists) return;
