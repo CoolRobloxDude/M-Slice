@@ -224,6 +224,11 @@ class NoteSplash extends FlxSprite
 			animId = anims > 1 ? FlxG.random.int(0, anims - 1) : 0;
 		}
 
+		// A recycled splash must start with a clean lifecycle. In particular, the
+		// watchdog timer must not inherit time from its previous animation.
+		revive();
+		spawned = true;
+		aliveTime = 0;
 		this.noteData = noteData;
 		var anim:String = playDefaultAnim(noteData % Note.colArray.length + animId * Note.colArray.length);
 		
@@ -317,7 +322,9 @@ class NoteSplash extends FlxSprite
 
 		animation.finishCallback = function(name:String)
 		{
-			PlayState.instance != null ? killLimit() : kill();
+			// Remove this exact instance from the active list. Removing index 0
+			// here can orphan a different splash when animations finish out of order.
+			kill();
 		};
 
 		if(animation.curAnim != null && conf != null)
@@ -352,17 +359,13 @@ class NoteSplash extends FlxSprite
 	}
 
 	var aliveTime:Float = 0;
-	final buggedKillTime:Float = 0.5; //automatically kills note splashes if they break to prevent it from flooding your HUD
+	final buggedKillTime:Float = 2.0; // hard safety timeout for a splash whose animation/callback gets stuck
 	override function update(elapsed:Float)
 	{
 		if (spawned)
 		{
 			aliveTime += elapsed;
-			if (animation.curAnim == null && aliveTime >= buggedKillTime)
-			{
-				kill();
-				spawned = false;
-			}
+			if (aliveTime >= buggedKillTime) kill();
 		}
 
 		if (babyArrow != null)
@@ -436,8 +439,8 @@ class NoteSplash extends FlxSprite
 	public function killLimit(targetId:Int = -1) {
 		try {
 			before = PlayState.splashUsing[noteData].length;
-			if (targetId != -1) PlayState.splashUsing[noteData].splice(targetId, 1);
-			else PlayState.splashUsing[noteData].splice(0, 1);
+			if (targetId >= 0 && targetId < PlayState.splashUsing[noteData].length)
+				PlayState.splashUsing[noteData].splice(targetId, 1);
 			after = PlayState.splashUsing[noteData].length;
 			// trace("killed: " + before + " -> " + after);
 		} catch (e) { trace("something went wrong? " + e.message); }
@@ -445,6 +448,18 @@ class NoteSplash extends FlxSprite
 	}
 
 	override function kill() {
+		if (PlayState.splashUsing != null && noteData >= 0 && noteData < PlayState.splashUsing.length)
+		{
+			var activeSplashes = PlayState.splashUsing[noteData];
+			if (activeSplashes != null)
+			{
+				var index = activeSplashes.indexOf(this);
+				if (index >= 0) activeSplashes.splice(index, 1);
+			}
+		}
+		spawned = false;
+		aliveTime = 0;
+		if (animation != null) animation.finishCallback = null;
 		super.kill();
 	}
 	
