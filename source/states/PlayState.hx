@@ -332,6 +332,9 @@ class PlayState extends MusicBeatState
 
 	// Achievement shit
 	var keysPressed:Array<Int> = [];
+	// Song timestamp of the most recent key release for each player lane.
+	// Used only to grant a tiny grace period on the final remaining sustain tail.
+	var lastSustainRelease:Array<Float> = [-1, -1, -1, -1];
 	var boyfriendIdleTime:Float = 0.0;
 	var boyfriendIdled:Bool = false;
 
@@ -2164,6 +2167,7 @@ class PlayState extends MusicBeatState
 								sustainNote = {
 									strumTime: swagNote.strumTime + curStepCrochet * susNote,
 									noteData: swagNote.noteData,
+									sustainEndTime: swagNote.strumTime + swagNote.holdLength,
 									noteType: swagNote.noteType,
 									doOppStuff: swagNote.doOppStuff,
 								};
@@ -3576,10 +3580,10 @@ class PlayState extends MusicBeatState
 								{
 									if (cpuControlled)
 										goodNoteHit(daNote);
-									else if (!daNote.ignoreNote && !endingSong && !daNote.wasGoodHit) {
-										// Match JS Engine's late-note cleanup: an unhit sustain is
-										// judged after noteKillOffset, not after a single step.
-										noteMiss(daNote);
+									else if ((!daNote.ignoreNote && !endingSong && daNote.tooLate) || !daNote.wasGoodHit) {
+										// The grace check is also needed here in case the note survives
+										// long enough to reach the normal late-note cleanup path.
+										if (!hasLateSustainReleaseGrace(daNote)) noteMiss(daNote);
 									}
 								} else if (!daNote.hitByOpponent)
 									opponentNoteHit(daNote);
@@ -3614,10 +3618,13 @@ class PlayState extends MusicBeatState
 						
 							if (canBeHit) {
 								if (daNote.mustPress) {
-									if (!daNote.blockHit) {
+									if (!daNote.blockHit || daNote.isSustainNote) {
 										if (cpuControlled) goodNoteHit(daNote);
-										// Unheld sustain segments remain eligible until noteKillOffset;
-										// the shared late-note cleanup above records the miss.
+										else if (!toBool(pressHit & 1<<daNote.noteData) && 
+											daNote.isSustainNote && !daNote.wasGoodHit && 
+										Conductor.songPosition - daNote.strumTime > Conductor.stepCrochet) {
+											if (!hasLateSustainReleaseGrace(daNote)) noteMiss(daNote);
+										}
 									}
 								} else if (!daNote.hitByOpponent && !daNote.ignoreNote || daNote.isSustainNote)
 									opponentNoteHit(daNote);
@@ -5083,64 +5090,51 @@ class PlayState extends MusicBeatState
 		var ret = callOnScripts('onKeyPressPre', [key]);
 		if (ret == LuaUtils.Function_Stop)
 			return;
+		lastSustainRelease[key] = -1;
 
 		// more accurate hit time for the ratings?
 		var lastTime:Float = Conductor.songPosition;
 		if (Conductor.songPosition >= 0)
 			Conductor.songPosition = FlxG.sound.music.time + Conductor.offset;
 
-		// Find the best two hittable notes without allocating or sorting an array.
-		var safeZone:Float = Conductor.safeZoneOffset;
-		var songTime:Float = Conductor.songPosition;
-
-		var funnyNote:Note = null;
-		var doubleNote:Note = null;
-
-		for (n in notes.members)
+		// obtain notes that the player can hit
+		var plrInputNotes:Array<Note> = notes.members.filter(function(n:Note):Bool
 		{
-			if (n == null || n.noteData != key || !n.mustPress
-				|| n.tooLate || n.wasGoodHit || n.blockHit || n.isSustainNote
-				|| strumsBlocked[key])
-				continue;
+			var canHit:Bool = n != null && !strumsBlocked[n.noteData] && n.canBeHit && n.mustPress && !n.tooLate && !n.wasGoodHit && !n.blockHit;
+			return canHit && !n.isSustainNote && n.noteData == key;
+		});
+		plrInputNotes.sort(sortHitNotes);
 
-			var canHitNow:Bool =
-				n.strumTime > songTime - (safeZone * n.lateHitMult)
-				&& n.strumTime < songTime + (safeZone * n.earlyHitMult);
+		if (plrInputNotes.length != 0)
+		{ // slightly faster than doing `> 0` lol
+			var funnyNote:Note = plrInputNotes[0]; // front note
 
-			if (!canHitNow)
-				continue;
-
-			if (funnyNote == null || sortHitNotes(n, funnyNote) < 0)
+			if (plrInputNotes.length > 1)
 			{
-				doubleNote = funnyNote;
-				funnyNote = n;
-			}
-			else if (doubleNote == null || sortHitNotes(n, doubleNote) < 0)
-			{
-				doubleNote = n;
-			}
-		}
+				var doubleNote:Note = plrInputNotes[1];
 
-		if (funnyNote != null)
-		{
-			if (doubleNote != null)
-			{
-				if (Math.abs(doubleNote.strumTime - funnyNote.strumTime) < 1.0)
-					invalidateNote(doubleNote);
-				else if (doubleNote.strumTime < funnyNote.strumTime)
-					funnyNote = doubleNote;
+				if (doubleNote.noteData == funnyNote.noteData)
+				{
+					// if the note has a 0ms distance (is on top of the current note), kill it
+					if (Math.abs(doubleNote.strumTime - funnyNote.strumTime) < 1.0)
+						invalidateNote(doubleNote);
+					else if (doubleNote.strumTime < funnyNote.strumTime)
+					{
+						// replace the note if its ahead of time (or at least ensure "doubleNote" is ahead)
+						funnyNote = doubleNote;
+					}
+				}
 			}
-
 			goodNoteHit(funnyNote);
-			if (showPopups && popUpHitNote != null)
-				popUpScore(funnyNote);
+			if (showPopups && popUpHitNote != null) popUpScore(funnyNote);
 		}
 		else
 		{
-			if (ClientPrefs.data.ghostTapping)
+			if (ClientPrefs.data.ghostTapping){
 				callOnScripts('onGhostTap', [key]);
-			else
+			}else{
 				noteMissPress(key);
+			}
 		}
 
 		// Needed for the  "Just the Two of Us" achievement.
@@ -5187,6 +5181,7 @@ class PlayState extends MusicBeatState
 		var ret = callOnScripts('onKeyReleasePre', [key]);
 		if (ret == LuaUtils.Function_Stop)
 			return;
+		lastSustainRelease[key] = Conductor.songPosition;
 
 		var strumGroup = opponentChart ? opponentStrums : playerStrums;
 		var spr:StrumNote = strumGroup.members[key];
@@ -5197,8 +5192,8 @@ class PlayState extends MusicBeatState
 
 			if (enableHoldSplash) {
 				var splashIndex = key + (opponentChart ? 0 : 4);
-				var susplash = susplashMap[splashIndex];
-				if (susplash != null) susplash.releaseHold();
+				var susplash = grpHoldSplashes.members[splashIndex];
+				if (susplash != null && !susplash.ending) susplash.showEndSplash();
 			}
 		}
 		callOnScripts('onKeyRelease', [key]);
@@ -5293,6 +5288,23 @@ class PlayState extends MusicBeatState
 			for (i in 0...releaseArray.length)
 				if (releaseArray[i] || strumsBlocked[i] == true)
 					keyReleased(i);
+	}
+
+	/**
+	 * A release close to the actual end of a sustain should not turn the
+	 * remaining tail segments into misses. Earlier releases still miss normally.
+	 */
+	function hasLateSustainReleaseGrace(note:Note):Bool
+	{
+		if (note == null || !note.isSustainNote || note.noteData < 0 || note.noteData >= lastSustainRelease.length)
+			return false;
+
+		var releasedAt:Float = lastSustainRelease[note.noteData];
+		if (releasedAt < 0) return false;
+
+		var graceWindow:Float = Math.min(75, Conductor.stepCrochet * 0.5);
+		var remainingTime:Float = note.sustainEndTime - releasedAt;
+		return Math.abs(remainingTime) <= graceWindow;
 	}
 
 	function noteMiss(daNote:Note):Void
@@ -5772,74 +5784,63 @@ class PlayState extends MusicBeatState
 		}
 
 		if (!note.isSustainNote) invalidateNote(note);
-	}
-
+    }
+}
 
 function collapseStack(mainNote:Note):Int
-{
-    if (!ClientPrefs.data.moreSpammableInputs || cpuControlled)
-        return 0;
+	{
+	    if (!ClientPrefs.data.moreSpammableInputs || cpuControlled) return 0;
 
-    var window:Int = Std.int(Math.max(1, ClientPrefs.data.stackWindow));
-    var songPos:Float = Conductor.songPosition;
-    var killed:Int = 0;
+	    var window:Int = Std.int(Math.max(1, ClientPrefs.data.stackWindow));
+	    var songPos:Float = Conductor.songPosition;
+	    var killed:Int = 0;
 
-    for (note in notes.members)
-    {
-        if (note == null || !note.exists || note == mainNote)
-            continue;
+	    for (note in notes.members)
+	    {
+	        if (note == null || note == mainNote) continue;
+	        if (!note.mustPress) continue;
+	        if (note.wasGoodHit) continue;
+	        if (note.noteData != mainNote.noteData) continue;
 
-        if (!note.mustPress || note.wasGoodHit || note.isSustainNote)
-            continue;
+	        if (Math.abs(note.strumTime - songPos) <= window)
+	        {
+	            note.wasGoodHit = true;
+	            note.tooLate = false;
+	            note.ignoreNote = true;
+	            note.visible = false;
+	            note.alpha = 0;
 
-        if (note.blockHit || note.hitCausesMiss)
-            continue;
+	            if (!note.isSustainNote)
+	                killed++;
+	        }
+	    }
 
-        if (note.noteData != mainNote.noteData)
-            continue;
+	    return killed;
+	}
 
-        // Don't consume notes belonging to the opposite side.
-        if (bothSides && note.doOppStuff != mainNote.doOppStuff)
-            continue;
+	public function invalidateNote(note:Note):Void {
+		if (!note.exists) return;
+		note.exists = note.visible = false;
+		if (betterRecycle) notes.push(note);
+	}
 
-        if (Math.abs(note.strumTime - songPos) <= window)
-        {
-            note.wasGoodHit = true;
-            note.tooLate = false;
-            note.ignoreNote = true;
-            note.visible = false;
-            note.alpha = 0;
+	public static var susplashMap:Vector<SustainSplash> = new Vector(8);
 
-            killed++;
-        }
-    }
+	public function spawnHoldSplash(note:Note) {
+		if (note == null || note.strum == null) return;
+		var splashMustPress = opponentChart ? !note.mustPress : note.mustPress;
+		var susplashIndex = (splashMustPress ? 4 : 0) + note.noteData;
+		var susplash = susplashMap[susplashIndex];
+		var isUsedSplash = susplash.holding;
 
-    return killed;
-}
+		if (!isUsedSplash || isUsedSplash && note.isSustainEnds) {
+			var holdSplashStrum = splashMustPress ? playerStrums.members[note.noteData] : opponentStrums.members[note.noteData];
+			if (note.strum != splashStrum) note.strum = holdSplashStrum;
 
-public function invalidateNote(note:Note):Void {
-    if (!note.exists) return;
-    note.exists = note.visible = false;
-    if (betterRecycle) notes.push(note);
-}
-
-public static var susplashMap:Vector<SustainSplash> = new Vector(8);
-
-public function spawnHoldSplash(note:Note) {
-    if (note == null || note.strum == null) return;
-    var splashMustPress = opponentChart ? !note.mustPress : note.mustPress;
-    var susplashIndex = (splashMustPress ? 4 : 0) + note.noteData;
-    var susplash = susplashMap[susplashIndex];
-    var isUsedSplash = susplash.holding;
-
-    if (!isUsedSplash || isUsedSplash && note.isSustainEnds) {
-        var holdSplashStrum = splashMustPress ? playerStrums.members[note.noteData] : opponentStrums.members[note.noteData];
-        if (note.strum != splashStrum) note.strum = holdSplashStrum;
-
-        susplash.setupSusSplash(note, playbackRate);
-
-        if (!isUsedSplash) {
-            // trace("Index " + susplashIndex + " was added.");
+			susplash.setupSusSplash(note, playbackRate);
+			
+			if (!isUsedSplash) {
+				// trace("Index " + susplashIndex + " was added.");
 				grpHoldSplashes.add(susplash);
 			}
 		}
@@ -5892,7 +5893,9 @@ public function spawnHoldSplash(note:Note) {
 		} else playerSplash.babyArrow = (splashNoteData < 3 ? opponentStrums.members[splashNoteData] : playerStrums.members[splashNoteData - 4]);
 		// trace(splashNoteData);
 		playerSplash.spawnSplashNote(note, splashNoteData);
-		if (splashNoteData >= 0) {
+		// Missing/invalid splash animations can kill the object during setup.
+		// Never register a dead pooled object as an active splash.
+		if (splashNoteData >= 0 && playerSplash.alive) {
 			splashUsing[splashNoteData].push(playerSplash);
 		}
 		grpNoteSplashes.add(playerSplash);
