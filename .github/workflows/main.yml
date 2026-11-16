@@ -79,7 +79,7 @@ jobs:
             cachePath: H-Slice+JS.build-android
             cacheLibrariesPath: H-Slice+JS.mobile-cache
           - name: iOS
-            os: macos-15
+            os: ubuntu-latest
             buildArgs: "ios -nosign"
             exportPath: ios
             artifactName: H-Slice+JS_0.2.4_ios
