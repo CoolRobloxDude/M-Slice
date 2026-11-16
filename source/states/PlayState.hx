@@ -5817,59 +5817,29 @@ function collapseStack(mainNote:Note):Int
     return killed;
 }
 
-	{
-	    if (!ClientPrefs.data.moreSpammableInputs || cpuControlled) return 0;
+public function invalidateNote(note:Note):Void {
+    if (!note.exists) return;
+    note.exists = note.visible = false;
+    if (betterRecycle) notes.push(note);
+}
 
-	    var window:Int = Std.int(Math.max(1, ClientPrefs.data.stackWindow));
-	    var songPos:Float = Conductor.songPosition;
-	    var killed:Int = 0;
+public static var susplashMap:Vector<SustainSplash> = new Vector(8);
 
-	    for (note in notes.members)
-	    {
-	        if (note == null || note == mainNote) continue;
-	        if (!note.mustPress) continue;
-	        if (note.wasGoodHit) continue;
-	        if (note.noteData != mainNote.noteData) continue;
+public function spawnHoldSplash(note:Note) {
+    if (note == null || note.strum == null) return;
+    var splashMustPress = opponentChart ? !note.mustPress : note.mustPress;
+    var susplashIndex = (splashMustPress ? 4 : 0) + note.noteData;
+    var susplash = susplashMap[susplashIndex];
+    var isUsedSplash = susplash.holding;
 
-	        if (Math.abs(note.strumTime - songPos) <= window)
-	        {
-	            note.wasGoodHit = true;
-	            note.tooLate = false;
-	            note.ignoreNote = true;
-	            note.visible = false;
-	            note.alpha = 0;
+    if (!isUsedSplash || isUsedSplash && note.isSustainEnds) {
+        var holdSplashStrum = splashMustPress ? playerStrums.members[note.noteData] : opponentStrums.members[note.noteData];
+        if (note.strum != splashStrum) note.strum = holdSplashStrum;
 
-	            if (!note.isSustainNote)
-	                killed++;
-	        }
-	    }
+        susplash.setupSusSplash(note, playbackRate);
 
-	    return killed;
-	}
-
-	public function invalidateNote(note:Note):Void {
-		if (!note.exists) return;
-		note.exists = note.visible = false;
-		if (betterRecycle) notes.push(note);
-	}
-
-	public static var susplashMap:Vector<SustainSplash> = new Vector(8);
-
-	public function spawnHoldSplash(note:Note) {
-		if (note == null || note.strum == null) return;
-		var splashMustPress = opponentChart ? !note.mustPress : note.mustPress;
-		var susplashIndex = (splashMustPress ? 4 : 0) + note.noteData;
-		var susplash = susplashMap[susplashIndex];
-		var isUsedSplash = susplash.holding;
-
-		if (!isUsedSplash || isUsedSplash && note.isSustainEnds) {
-			var holdSplashStrum = splashMustPress ? playerStrums.members[note.noteData] : opponentStrums.members[note.noteData];
-			if (note.strum != splashStrum) note.strum = holdSplashStrum;
-
-			susplash.setupSusSplash(note, playbackRate);
-			
-			if (!isUsedSplash) {
-				// trace("Index " + susplashIndex + " was added.");
+        if (!isUsedSplash) {
+            // trace("Index " + susplashIndex + " was added.");
 				grpHoldSplashes.add(susplash);
 			}
 		}
