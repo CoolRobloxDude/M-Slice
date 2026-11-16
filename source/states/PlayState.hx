@@ -5783,8 +5783,9 @@ class PlayState extends MusicBeatState
 			result = null;
 		}
 
-		if (!note.isSustainNote) invalidateNote(note);
+        if (!note.isSustainNote) invalidateNote(note);
     }
+}
 
 function collapseStack(mainNote:Note):Int
 	{
