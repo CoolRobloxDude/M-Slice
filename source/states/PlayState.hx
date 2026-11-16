@@ -3576,8 +3576,9 @@ class PlayState extends MusicBeatState
 								{
 									if (cpuControlled)
 										goodNoteHit(daNote);
-									else if (!daNote.ignoreNote && !endingSong && daNote.tooLate || !daNote.wasGoodHit) {
-										// trace(noteKillOffset, Conductor.stepCrochet);
+									else if (!daNote.ignoreNote && !endingSong && !daNote.wasGoodHit) {
+										// Match JS Engine's late-note cleanup: an unhit sustain is
+										// judged after noteKillOffset, not after a single step.
 										noteMiss(daNote);
 									}
 								} else if (!daNote.hitByOpponent)
@@ -3613,11 +3614,10 @@ class PlayState extends MusicBeatState
 						
 							if (canBeHit) {
 								if (daNote.mustPress) {
-									if (!daNote.blockHit || daNote.isSustainNote) {
+									if (!daNote.blockHit) {
 										if (cpuControlled) goodNoteHit(daNote);
-										else if (!toBool(pressHit & 1<<daNote.noteData) && 
-											daNote.isSustainNote && !daNote.wasGoodHit && 
-										Conductor.songPosition - daNote.strumTime > Conductor.stepCrochet) noteMiss(daNote);
+										// Unheld sustain segments remain eligible until noteKillOffset;
+										// the shared late-note cleanup above records the miss.
 									}
 								} else if (!daNote.hitByOpponent && !daNote.ignoreNote || daNote.isSustainNote)
 									opponentNoteHit(daNote);
@@ -5197,8 +5197,8 @@ class PlayState extends MusicBeatState
 
 			if (enableHoldSplash) {
 				var splashIndex = key + (opponentChart ? 0 : 4);
-				var susplash = grpHoldSplashes.members[splashIndex];
-				if (susplash != null && !susplash.ending) susplash.showEndSplash();
+				var susplash = susplashMap[splashIndex];
+				if (susplash != null) susplash.releaseHold();
 			}
 		}
 		callOnScripts('onKeyRelease', [key]);
